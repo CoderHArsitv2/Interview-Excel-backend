@@ -222,6 +222,10 @@ func GenerateWeeklyAvailability(c *gin.Context) {
 			currentDay.Year(), currentDay.Month(), currentDay.Day(),
 			endClock.Hour(), endClock.Minute(), 0, 0, time.Local,
 		)
+		if end.Before(start) || end.Equal(start) {
+			end = end.AddDate(0, 0, 1)
+		}
+
 		if req.SlotSize <= 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "slot size must be greater than 0"})
 			return
@@ -232,7 +236,7 @@ func GenerateWeeklyAvailability(c *gin.Context) {
 		for t := start; t.Add(duration).Before(end) || t.Add(duration).Equal(end); t = t.Add(duration) {
 			slot := models.AvailabilitySlot{
 				ExpertID:  (req.ExpertID),
-				Date:      currentDay,
+				Date:      time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.Local),
 				StartTime: t,
 				EndTime:   t.Add(duration),
 				Status:    string(models.SlotAvailable),
