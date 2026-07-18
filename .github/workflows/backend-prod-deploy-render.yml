@@ -37,8 +37,14 @@ jobs:
 
       - name: Run production migrations (Neon)
         env:
+          APP_ENV: production
           DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
-        run: go run . migrate
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::PRODUCTION_DATABASE_URL secret is empty or unset in the 'production' environment"
+            exit 1
+          fi
+          go run . migrate
 
       - name: Trigger Render deploy
         env:
