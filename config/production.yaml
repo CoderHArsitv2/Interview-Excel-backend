@@ -1,0 +1,13 @@
+# Production environment defaults.
+# Environment variables ALWAYS override these values.
+# Secrets (DATABASE_URL, JWT_SECRET, etc.) must be set via env vars in AWS App Runner.
+
+app_env: production
+port: "8080"
+cookie_domain: ".interviewexcel.com"
+cookie_secure: true
+cors_allowed_origins:
+  - "https://interviewexcel.com"
+google_redirect_url: "https://api.interviewexcel.com/google_callback"
+redis_enabled: true
+redis_use_tls: true

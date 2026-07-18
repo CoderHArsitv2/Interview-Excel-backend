@@ -1,0 +1,67 @@
+name: Backend Production Deploy (Render)
+
+# Manual, tag-pinned deploy to Render backed by a Neon Postgres database.
+# The AWS App Runner deploy lives in backend-prod-deploy.yml and is unaffected.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Git tag to deploy (e.g. v1.2.0)"
+        required: true
+
+concurrency:
+  group: prod-render-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Check out the requested tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag }}
+
+      - name: Resolve deployed commit
+        id: commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run production migrations (Neon)
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: go run . migrate
+
+      - name: Trigger Render deploy
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_PRODUCTION_DEPLOY_HOOK_URL }}
+          DEPLOY_SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          # Render deploy hooks accept an optional ?ref= to pin the build to a
+          # specific commit, so prod builds exactly the tagged revision.
+          curl -fsS -X POST "${RENDER_DEPLOY_HOOK_URL}&ref=${DEPLOY_SHA}"
+
+      - name: Smoke test production health endpoint
+        env:
+          PRODUCTION_HEALTHCHECK_URL: ${{ secrets.RENDER_PRODUCTION_HEALTHCHECK_URL }}
+        run: |
+          echo "⏳ Waiting for Render deploy to become healthy..."
+          for i in $(seq 1 36); do
+            if curl -fsS "$PRODUCTION_HEALTHCHECK_URL"; then
+              echo ""
+              echo "✅ Production is healthy"
+              exit 0
+            fi
+            echo "  attempt $i/36 — retrying in 10s..."
+            sleep 10
+          done
+          echo "Production health check failed"
+          exit 1

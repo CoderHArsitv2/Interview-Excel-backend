@@ -1,0 +1,6 @@
+.env
+.git
+.github
+interviewexcel-backend-go
+docs
+*.md

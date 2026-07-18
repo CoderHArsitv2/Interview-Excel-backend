@@ -1,0 +1,12 @@
+# Development environment defaults.
+# Environment variables ALWAYS override these values.
+
+app_env: development
+port: "8080"
+cookie_domain: ""
+cookie_secure: false
+cors_allowed_origins:
+  - "http://localhost:3010"
+google_redirect_url: "http://localhost:8080/google_callback"
+redis_enabled: false
+redis_use_tls: false

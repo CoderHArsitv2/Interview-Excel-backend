@@ -1,0 +1,13 @@
+# Staging environment defaults.
+# Environment variables ALWAYS override these values.
+# Secrets (DATABASE_URL, JWT_SECRET, etc.) must be set via env vars in Render dashboard.
+
+app_env: staging
+port: "8080"
+cookie_domain: ".interview-excel-backend.onrender.com"
+cookie_secure: true
+cors_allowed_origins:
+  - "https://interview-excel-backend.onrender.com"
+google_redirect_url: "https://interview-excel-backend.onrender.com/google_callback"
+redis_enabled: false
+redis_use_tls: false

@@ -2,17 +2,19 @@ package config
 
 import (
 	"fmt"
-	"golang.org/x/oauth2/google"
 	"interviewexcel-backend-go/models"
 	"log"
-	"os"
 
-	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	"github.com/razorpay/razorpay-go"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
+
+var RazorpayClient *razorpay.Client
 
 type Config struct {
 	GoogleLoginConfig oauth2.Config
@@ -20,51 +22,70 @@ type Config struct {
 
 var AppConfig Config
 
-func GoogleConfig() oauth2.Config {
-	err := godotenv.Load(".env")
-	if err != nil {
-		log.Fatalf("Some error occured. Err: %s", err)
-	}
+func GoogleConfig() *oauth2.Config {
+	runtimeConfig := RuntimeConfig()
 	AppConfig.GoogleLoginConfig = oauth2.Config{
-		RedirectURL:  "http://localhost:8080/google_callback",
-		ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
-		ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+		RedirectURL:  runtimeConfig.GoogleRedirectURL,
+		ClientID:     runtimeConfig.GoogleClientID,
+		ClientSecret: runtimeConfig.GoogleClientSecret,
 		Scopes: []string{"https://www.googleapis.com/auth/userinfo.email",
 			"https://www.googleapis.com/auth/userinfo.profile"},
 		Endpoint: google.Endpoint,
 	}
 
-	log.Println("This is correct")
-	return AppConfig.GoogleLoginConfig
+	return &AppConfig.GoogleLoginConfig
 }
 
 var DB *gorm.DB
 
-func InitDB() {
-	err := godotenv.Load()
+func OpenDB() (*gorm.DB, error) {
+	// Ensure logrus level allows SQL logs
+	logrus.SetLevel(logrus.InfoLevel)
+
+	db, err := gorm.Open(postgres.Open(DatabaseDSN()), &gorm.Config{
+		Logger: NewGormLogger(),
+	})
 	if err != nil {
-		log.Fatal("Error loading .env file")
+		return nil, fmt.Errorf("error connecting to the DB: %w", err)
 	}
 
-	dbURI := fmt.Sprintf("host=%s port=%s user=%s dbname=%s password=%s sslmode=disable",
-		os.Getenv("DB_HOST"),
-		os.Getenv("DB_PORT"),
-		os.Getenv("DB_USER"),
-		os.Getenv("DB_NAME"),
-		os.Getenv("DB_PASSWORD"),
-	)
+	return db, nil
+}
 
-	db, err := gorm.Open(postgres.Open(dbURI), &gorm.Config{})
+func InitDB() error {
+	db, err := OpenDB()
 	if err != nil {
-		log.Fatal("Error in connecting the DB: ", err)
-	}
-
-	// Perform auto-migration
-	err = db.AutoMigrate(models.GetMigrationModel()...)
-	if err != nil {
-		log.Fatal("Migration failed: ", err)
+		return err
 	}
 
 	DB = db
 	log.Println("Database connected successfully")
+	return nil
+}
+
+func RunMigrations() error {
+	if DB == nil {
+		if err := InitDB(); err != nil {
+			return err
+		}
+	}
+
+	if err := DB.AutoMigrate(models.GetMigrationModel()...); err != nil {
+		return fmt.Errorf("migration failed: %w", err)
+	}
+
+	log.Println("Database migrations completed successfully")
+	return nil
+}
+
+func InitRazorpay() error {
+	runtimeConfig := RuntimeConfig()
+
+	if runtimeConfig.RazorpayKey == "" || runtimeConfig.RazorpaySecret == "" {
+		return fmt.Errorf("missing Razorpay credentials")
+	}
+
+	RazorpayClient = razorpay.NewClient(runtimeConfig.RazorpayKey, runtimeConfig.RazorpaySecret)
+	log.Println("Razorpay client initialized")
+	return nil
 }

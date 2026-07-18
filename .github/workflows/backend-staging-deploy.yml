@@ -1,0 +1,59 @@
+name: Backend Staging Deploy
+
+on:
+  workflow_run:
+    workflows:
+      - Backend CI
+    types:
+      - completed
+
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run staging migrations
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        run: go run . migrate
+
+      - name: Trigger Render deploy
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_STAGING_DEPLOY_HOOK_URL }}
+        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"
+
+      - name: Smoke test staging health endpoint
+        env:
+          STAGING_HEALTHCHECK_URL: ${{ secrets.STAGING_HEALTHCHECK_URL }}
+        run: |
+          echo "⏳ Waiting for Render deploy to become healthy..."
+          for i in $(seq 1 36); do
+            if curl -fsS "$STAGING_HEALTHCHECK_URL"; then
+              echo ""
+              echo "✅ Staging is healthy"
+              exit 0
+            fi
+            echo "  attempt $i/36 — retrying in 10s..."
+            sleep 10
+          done
+          echo "Staging health check failed"
+          exit 1
