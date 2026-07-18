@@ -33,8 +33,14 @@ jobs:
 
       - name: Run staging migrations
         env:
+          APP_ENV: staging
           DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
-        run: go run . migrate
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::STAGING_DATABASE_URL secret is empty or unset in the 'staging' environment"
+            exit 1
+          fi
+          go run . migrate
 
       - name: Trigger Render deploy
         env:
