@@ -34,3 +34,86 @@ jobs:
 
       - name: Run tests
         run: go test ./...
+
+  # Create a semver tag + GitHub Release once verification passes on main.
+  # Runs as part of CI (not a separate workflow) so the tag is guaranteed to
+  # exist before Backend Staging Deploy — which waits for this whole run to
+  # finish — begins.
+  tag:
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Compute next version
+        id: version
+        run: |
+          set -euo pipefail
+
+          # Latest existing vX.Y.Z tag, or v0.0.0 if none exist yet.
+          latest="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)"
+          latest="${latest:-v0.0.0}"
+          echo "Latest tag: $latest"
+
+          ver="${latest#v}"
+          major="${ver%%.*}"
+          rest="${ver#*.}"
+          minor="${rest%%.*}"
+          patch="${rest##*.}"
+
+          # Commits since the last tag (all commits if there is no tag yet).
+          if git rev-parse "$latest" >/dev/null 2>&1; then
+            range="${latest}..HEAD"
+          else
+            range="HEAD"
+          fi
+          commits="$(git log --format='%s%n%b' "$range" || true)"
+
+          bump="patch"
+          if echo "$commits" | grep -qE '(^|[[:space:]])BREAKING CHANGE|^[a-z]+(\(.+\))?!:'; then
+            bump="major"
+          elif echo "$commits" | grep -qE '^feat(\(.+\))?:'; then
+            bump="minor"
+          fi
+          echo "Bump: $bump"
+
+          case "$bump" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+          esac
+
+          next="v${major}.${minor}.${patch}"
+          echo "Next tag: $next"
+          echo "tag=$next" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag + release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEXT_TAG: ${{ steps.version.outputs.tag }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if git rev-parse "$NEXT_TAG" >/dev/null 2>&1; then
+            echo "Tag $NEXT_TAG already exists, skipping."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$NEXT_TAG" -m "Release $NEXT_TAG"
+          git push origin "$NEXT_TAG"
+
+          gh release create "$NEXT_TAG" \
+            --target "$SHA" \
+            --title "$NEXT_TAG" \
+            --generate-notes

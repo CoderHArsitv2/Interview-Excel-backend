@@ -45,7 +45,16 @@ jobs:
       - name: Trigger Render deploy
         env:
           RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_STAGING_DEPLOY_HOOK_URL }}
-        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"
+        run: |
+          case "$RENDER_DEPLOY_HOOK_URL" in
+            https://api.render.com/deploy/srv-*)
+              ;;
+            *)
+              echo "::error::RENDER_STAGING_DEPLOY_HOOK_URL must be the Render deploy hook (https://api.render.com/deploy/srv-...?key=...), not the app URL. Get it from Render → Service → Settings → Deploy Hook."
+              exit 1
+              ;;
+          esac
+          curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"
 
       - name: Smoke test staging health endpoint
         env:

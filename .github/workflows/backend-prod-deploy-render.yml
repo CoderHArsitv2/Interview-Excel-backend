@@ -51,7 +51,15 @@ jobs:
           RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_PRODUCTION_DEPLOY_HOOK_URL }}
           DEPLOY_SHA: ${{ steps.commit.outputs.sha }}
         run: |
-          # Render deploy hooks accept an optional ?ref= to pin the build to a
+          case "$RENDER_DEPLOY_HOOK_URL" in
+            https://api.render.com/deploy/srv-*\?key=*)
+              ;;
+            *)
+              echo "::error::RENDER_PRODUCTION_DEPLOY_HOOK_URL must be the Render deploy hook (https://api.render.com/deploy/srv-...?key=...), not the app URL. Get it from Render → Service → Settings → Deploy Hook."
+              exit 1
+              ;;
+          esac
+          # Render deploy hooks accept an optional &ref= to pin the build to a
           # specific commit, so prod builds exactly the tagged revision.
           curl -fsS -X POST "${RENDER_DEPLOY_HOOK_URL}&ref=${DEPLOY_SHA}"
 
