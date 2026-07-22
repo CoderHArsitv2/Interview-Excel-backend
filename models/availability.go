@@ -28,7 +28,7 @@ type AvailabilitySlot struct {
 	StartTime time.Time `gorm:"not null" json:"start_time"`
 	EndTime   time.Time `gorm:"not null" json:"end_time"`
 
-	Status    string `gorm:"type:varchar(20);default:'available';index" json:"status"`
+	Status    string `gorm:"type:varchar(20);default:'AVAILABLE';index" json:"status"`
 	StudentID *uint  `gorm:"index" json:"student_id,omitempty"`
 }
 
@@ -50,7 +50,7 @@ func (r *availabilitySlotRepo) GetAllByExpert(expertID string) ([]AvailabilitySl
 // Get all available (not booked) slots
 func (r *availabilitySlotRepo) GetAvailableByExpert(expertID string) ([]AvailabilitySlot, error) {
 	var slots []AvailabilitySlot
-	err := r.DB.Where("expert_id = ? AND is_booked = false AND start_time >= ?", expertID, time.Now()).
+	err := r.DB.Where("expert_id = ? AND status = ? AND start_time >= ?", expertID, string(SlotAvailable), time.Now()).
 		Order("date ASC, start_time ASC").
 		Find(&slots).Error
 	return slots, err
@@ -65,7 +65,7 @@ func (r *availabilitySlotRepo) GetByID(id uint) (*AvailabilitySlot, error) {
 
 // Mark slot as booked
 func (r *availabilitySlotRepo) MarkAsBooked(id uint) error {
-	return r.DB.Model(&AvailabilitySlot{}).Where("id = ?", id).Update("is_booked", true).Error
+	return r.DB.Model(&AvailabilitySlot{}).Where("id = ?", id).Update("status", string(SlotBooked)).Error
 }
 
 // Delete a slot
@@ -90,7 +90,7 @@ func (r *availabilitySlotRepo) UpdateWithTx(tx *gorm.DB, slot *AvailabilitySlot,
 func (r *availabilitySlotRepo) GetBookedByStudent(studentID uint) ([]AvailabilitySlot, error) {
 	var slots []AvailabilitySlot
 	err := r.DB.
-		Where("student_id = ? AND is_booked = true AND date >= ?", studentID, time.Now()).
+		Where("student_id = ? AND status = ? AND date >= ?", studentID, string(SlotBooked), time.Now()).
 		Order("date ASC").
 		Find(&slots).Error
 	return slots, err
@@ -99,7 +99,7 @@ func (r *availabilitySlotRepo) GetBookedByStudent(studentID uint) ([]Availabilit
 func (r *availabilitySlotRepo) GetBookedSlotsByExpert(expertID uint) ([]AvailabilitySlot, error) {
 	var slots []AvailabilitySlot
 	err := r.DB.
-		Where("expert_id = ? AND is_booked = true AND date >= ?", expertID, time.Now()).
+		Where("expert_id = ? AND status = ? AND date >= ?", expertID, string(SlotBooked), time.Now()).
 		Order("date ASC, start_time ASC").
 		Find(&slots).Error
 	return slots, err
