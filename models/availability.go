@@ -47,6 +47,23 @@ func (r *availabilitySlotRepo) GetAllByExpert(expertID string) ([]AvailabilitySl
 	return slots, err
 }
 
+// Get slots for an expert filtered by time window.
+// filter: "upcoming" (start_time >= now), "past" (start_time < now), anything else -> all.
+func (r *availabilitySlotRepo) GetSlotsByExpertFiltered(expertID, filter string) ([]AvailabilitySlot, error) {
+	query := r.DB.Where("expert_id = ?", expertID)
+
+	switch filter {
+	case "upcoming":
+		query = query.Where("start_time >= ?", time.Now())
+	case "past":
+		query = query.Where("start_time < ?", time.Now())
+	}
+
+	var slots []AvailabilitySlot
+	err := query.Order("start_time ASC").Find(&slots).Error
+	return slots, err
+}
+
 // Get all available (not booked) slots
 func (r *availabilitySlotRepo) GetAvailableByExpert(expertID string) ([]AvailabilitySlot, error) {
 	var slots []AvailabilitySlot

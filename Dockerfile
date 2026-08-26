@@ -13,7 +13,7 @@ FROM gcr.io/distroless/base-debian12
 WORKDIR /app
 
 COPY --from=builder /interviewexcel-backend /app/interviewexcel-backend
-COPY --from=builder /app/config/*.yaml /app/config/
+COPY --from=builder /app/deploy/*.yaml /app/deploy/
 
 ARG BUILD_ENV=staging
 LABEL environment=${BUILD_ENV}

@@ -53,12 +53,13 @@ func GetUser(c *gin.Context) {
 		return
 	}
 
-	// Return only ID and role
 	c.JSON(http.StatusOK, gin.H{
 		"user": gin.H{
-			"id":   user.ID,
-			"uuid": user.UserUUID,
-			"role": user.Role,
+			"id":        user.ID,
+			"uuid":      user.UserUUID,
+			"role":      user.Role,
+			"full_name": user.FullName,
+			"email":     user.Email,
 		},
 	})
 }

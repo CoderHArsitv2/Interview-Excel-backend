@@ -9,6 +9,7 @@ var modelsForMigration = []interface{}{
 	&Session{},
 	&Wallet{},
 	&WalletTransaction{},
+	&UserUpload{},
 }
 
 func GetMigrationModel() []interface{} {

@@ -15,18 +15,17 @@ type Expert struct {
 	UserID    string         `gorm:"uniqueIndex" json:"user_uuid"` // ✅ string identifier
 	User      *User          `gorm:"foreignKey:UserID;references:UserUUID" json:"user,omitempty"`
 
-	FullName          string         `json:"full_name"`
-	Bio               string         `json:"bio,omitempty"`
-	Expertise         string         `json:"expertise"`
-	Specializations   pq.StringArray `gorm:"type:text[]" json:"specializations,omitempty"`
-	ExperienceYears   int            `json:"experience_years"`
-	Education         string         `json:"education,omitempty"`
-	Languages         pq.StringArray `gorm:"type:text[]" json:"languages,omitempty"`
-	ProfilePictureUrl string         `json:"profile_picture_url,omitempty"`
-	FeesPerSession    int            `json:"fees_per_session"`
-	City              string         `json:"city"`
-	Achievement       string         `json:"achievement"`
-	DOB               time.Time      `json:"dob"`
+	FullName        string         `json:"full_name"`
+	Bio             string         `json:"bio,omitempty"`
+	Expertise       string         `json:"expertise"`
+	Specializations pq.StringArray `gorm:"type:text[]" json:"specializations,omitempty"`
+	ExperienceYears int            `json:"experience_years"`
+	Education       string         `json:"education,omitempty"`
+	Languages       pq.StringArray `gorm:"type:text[]" json:"languages,omitempty"`
+	FeesPerSession  int            `json:"fees_per_session"`
+	City            string         `json:"city"`
+	Achievement     string         `json:"achievement"`
+	DOB             time.Time      `json:"dob"`
 
 	Rating             float64 `gorm:"default:0" json:"rating"`
 	TotalSessions      int     `gorm:"default:0" json:"total_sessions"`

@@ -9,19 +9,20 @@ import (
 )
 
 type Student struct {
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
-	DeletedAt    gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
-	ID           uint           `gorm:"primaryKey" json:"id"`
-	UserID       string         `gorm:"uniqueIndex" json:"user_uuid"` // references User.UserUUID
-	Bio          string         `json:"bio,omitempty"`
-	Sessions     string         `json:"sessions"`
-	Points       string         `json:"points"`
-	PreparingFor string         `json:"preparing_for"`
-	DateOfBirth  time.Time      `json:"dob"`
-	City         string         `json:"city"`
-	AboutMe      string         `json:"about_me"`
-	Skills       datatypes.JSON `json:"skills"` // JSON column for skills
+	CreatedAt         time.Time      `json:"created_at"`
+	UpdatedAt         time.Time      `json:"updated_at"`
+	DeletedAt         gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+	ID                uint           `gorm:"primaryKey" json:"id"`
+	UserID            string         `gorm:"uniqueIndex" json:"user_uuid"` // references User.UserUUID
+	Bio               string         `json:"bio,omitempty"`
+	Sessions          string         `json:"sessions"`
+	Points            string         `json:"points"`
+	PreparingFor      string         `json:"preparing_for"`
+	DateOfBirth       time.Time      `json:"dob"`
+	City              string         `json:"city"`
+	AboutMe           string         `json:"about_me"`
+	ProfilePictureUrl string         `json:"profile_picture_url"`
+	Skills            datatypes.JSON `json:"skills"` // JSON column for skills
 }
 
 type StudentRepo struct {

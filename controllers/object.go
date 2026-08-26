@@ -30,14 +30,15 @@ type StudentProfile struct {
 	Phone    string `json:"phone"`
 	FullName string `json:"full_name"`
 
-	Bio          string    `json:"bio,omitempty"`
-	Sessions     string    `json:"sessions"`
-	Points       string    `json:"points"`
-	PreparingFor string    `json:"preparing_for"`
-	DateOfBirth  time.Time `json:"dob"`
-	City         string    `json:"city"`
-	AboutMe      string    `json:"about_me"`
-	Skills       []string  `gorm:"type:json" json:"skills"` // JSON column for skills
+	Bio               string    `json:"bio,omitempty"`
+	Sessions          string    `json:"sessions"`
+	Points            string    `json:"points"`
+	PreparingFor      string    `json:"preparing_for"`
+	DateOfBirth       time.Time `json:"dob"`
+	City              string    `json:"city"`
+	AboutMe           string    `json:"about_me"`
+	ProfilePictureUrl string    `json:"profile_picture_url"`
+	Skills            []string  `gorm:"type:json" json:"skills"` // JSON column for skills
 }
 
 type ExpertProfile struct {
@@ -52,22 +53,27 @@ type ExpertProfile struct {
 	City     string  `json:"city"`
 
 	// From Expert
-	Bio                string    `json:"bio"`
-	DOB                time.Time `json:"dob"`
-	Languages          []string  `json:"languages"`
-	Specializations    []string  `json:"specializations"`
-	Expertise          string    `json:"expertise"`
-	Education          string    `json:"education"`
-	ExperienceYears    int       `json:"experience_years"`
-	ProfilePictureUrl  string    `json:"profile_picture_url"`
-	FeesPerSession     int       `json:"fees_per_session"`
-	Skills             string    `json:"skills"`
-	Achievements       string    `json:"achievements"`
-	Rating             float64   `json:"rating"` // if you added
-	TotalSessions      int       `json:"total_sessions"`
-	VerificationStatus string    `json:"verification_status"`
-	IsAvailable        bool      `json:"is_available"`
-	StudentMentored    int64     `json:"student_mentored"`
+	Bio             string    `json:"bio"`
+	DOB             time.Time `json:"dob"`
+	Languages       []string  `json:"languages"`
+	Specializations []string  `json:"specializations"`
+	Expertise       string    `json:"expertise"`
+	Education       string    `json:"education"`
+	ExperienceYears int       `json:"experience_years"`
+	// Both picture fields are read-only and resolved from user_uploads.
+	// ProfilePictureKey is the R2 object key of the latest upload;
+	// ProfilePictureUrl is a short-lived presigned URL derived from it.
+	// To change the picture, upload a new file — these are ignored on update.
+	ProfilePictureKey  string  `json:"profile_picture_key"`
+	ProfilePictureUrl  string  `json:"profile_picture_url"`
+	FeesPerSession     int     `json:"fees_per_session"`
+	Skills             string  `json:"skills"`
+	Achievements       string  `json:"achievements"`
+	Rating             float64 `json:"rating"` // if you added
+	TotalSessions      int     `json:"total_sessions"`
+	VerificationStatus string  `json:"verification_status"`
+	IsAvailable        bool    `json:"is_available"`
+	StudentMentored    int64   `json:"student_mentored"`
 }
 
 type AvailabilityRequest struct {
