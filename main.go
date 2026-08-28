@@ -34,6 +34,7 @@ func buildRouter() *gin.Engine {
 	routes.RegisterExpertRoutes(r)
 	routes.RegisterStudentRoutes(r)
 	routes.AuthRoutes(r)
+	routes.RegisterUploadRoutes(r)
 
 	// Banner
 	banner := `
@@ -87,12 +88,23 @@ func runServe() error {
 		return err
 	}
 
+	// Auto-migrate schema on startup so new tables/columns are applied on restart.
+	if err := config.RunMigrations(); err != nil {
+		return err
+	}
+
 	if err := config.InitRedis(); err != nil {
 		return err
 	}
 
 	if err := config.InitRazorpay(); err != nil {
 		return err
+	}
+
+	// R2 is optional: if credentials are missing, image uploads are disabled
+	// but the rest of the app still runs.
+	if err := config.InitR2(); err != nil {
+		log.Printf("warning: R2 not initialized, image uploads disabled: %v", err)
 	}
 
 	router := buildRouter()

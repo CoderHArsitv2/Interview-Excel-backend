@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"errors"
 	"interviewexcel-backend-go/config"
 	"interviewexcel-backend-go/models"
 	"net/http"
@@ -8,8 +9,10 @@ import (
 	"time"
 
 	logger "interviewexcel-backend-go/pkg/errors"
+	"interviewexcel-backend-go/pkg/storage"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 func GetExpertBookingsHandler(c *gin.Context) {
@@ -31,6 +34,25 @@ func GetExpertBookingsHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, slots)
+}
+
+// profilePictureKey returns the R2 object key of a user's current profile
+// picture. Uploads are append-only: there is no update path, so the newest
+// ACTIVE PROFILE_PICTURE record for the owner wins. Returns "" when the user
+// has never uploaded one, which callers treat as "fall back to user.Picture".
+//
+// TODO: store the user_uploads UUID on the expert/user row so resolving the
+// current picture is a foreign-key lookup instead of an ordered scan.
+func profilePictureKey(ownerUUID string) string {
+	upload, err := models.InitUserUploadRepo(config.DB).
+		GetLatestByOwnerAndCategory(ownerUUID, models.CategoryProfilePicture)
+	if err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			logger.Errorf("failed to fetch profile picture upload (owner_uuid=%s): %v", ownerUUID, err)
+		}
+		return ""
+	}
+	return upload.FileKey
 }
 
 func GetExpertProfile(c *gin.Context) {
@@ -66,6 +88,8 @@ func GetExpertProfile(c *gin.Context) {
 		return
 	}
 
+	pictureKey := profilePictureKey(uuid)
+
 	profile := ExpertProfile{
 		UserID:   userResp.ID,
 		UserUUID: userResp.UserUUID,
@@ -79,7 +103,8 @@ func GetExpertProfile(c *gin.Context) {
 		DOB:                expertResp.DOB,
 		Expertise:          expertResp.Expertise,
 		ExperienceYears:    expertResp.ExperienceYears,
-		ProfilePictureUrl:  expertResp.ProfilePictureUrl,
+		ProfilePictureKey:  pictureKey,
+		ProfilePictureUrl:  storage.PresignStored(c.Request.Context(), pictureKey),
 		Education:          expertResp.Education,
 		City:               expertResp.City,
 		Languages:          expertResp.Languages,
@@ -129,14 +154,16 @@ func UpdateExpertProfile(c *gin.Context) {
 	expertRepo := models.InitExpertRepo(tx)
 	userRepo := models.InitUserRepo(tx)
 
+	// The profile picture is not part of this payload: it lives in user_uploads
+	// and is replaced by uploading a new file, not by updating the expert row.
+	// Any profile_picture_key/url sent by the client is ignored.
 	expertRequest := &models.Expert{
-		Expertise:         request.Expertise,
-		ExperienceYears:   request.ExperienceYears,
-		City:              request.City,
-		DOB:               request.DOB,
-		ProfilePictureUrl: request.ProfilePictureUrl,
-		FeesPerSession:    request.FeesPerSession,
-		Achievement:       request.Achievements,
+		Expertise:       request.Expertise,
+		ExperienceYears: request.ExperienceYears,
+		City:            request.City,
+		DOB:             request.DOB,
+		FeesPerSession:  request.FeesPerSession,
+		Achievement:     request.Achievements,
 	}
 
 	if err := expertRepo.UpdateWithTx(tx, &models.Expert{UserID: uuid}, expertRequest); err != nil {
@@ -285,14 +312,22 @@ func GetAllSlotsOfExpert(c *gin.Context) {
 		return
 	}
 
-	availableSlots, err := availabilityRepo.GetAllByExpert(uuid)
-	if err != nil {
-		logger.Error("Error in getting the available slots: ", err)
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-			"error": err,
-		})
+	// filter: "upcoming" | "past" | "all" (default). Invalid values fall back to "all".
+	filter := c.DefaultQuery("filter", "all")
+	if filter != "upcoming" && filter != "past" && filter != "all" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid filter, expected one of: upcoming, past, all"})
+		return
 	}
-	c.JSON(http.StatusOK, availableSlots)
+
+	slots, err := availabilityRepo.GetSlotsByExpertFiltered(uuid, filter)
+	if err != nil {
+		logger.Error("Error in getting the slots: ", err)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to fetch slots",
+		})
+		return
+	}
+	c.JSON(http.StatusOK, slots)
 }
 
 func CancelSlotOfExpert(c *gin.Context) {
@@ -385,7 +420,9 @@ func GetExpertDashboard(c *gin.Context) {
 		return
 	}
 
-	profilePic := expert.ProfilePictureUrl
+	// Presign the latest uploaded picture; fall back to user.Picture (from
+	// Google auth), which is already a usable URL.
+	profilePic := storage.PresignStored(c.Request.Context(), profilePictureKey(uuid))
 	if profilePic == "" {
 		profilePic = user.Picture
 	}
@@ -465,4 +502,106 @@ func GetExpertDashboard(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+// getExpertSession loads a session by uuid and verifies it belongs to the
+// authenticated expert. It writes the appropriate error response and returns
+// (nil, false) on failure.
+func getExpertSession(c *gin.Context) (*models.Session, bool) {
+	sessionUUID := c.Param("session_uuid")
+
+	userID, exists := c.Get("user_uuid")
+	if !exists {
+		logger.Error("user_uuid missing in context")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return nil, false
+	}
+	expertUUID, ok := userID.(string)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user UUID"})
+		return nil, false
+	}
+
+	session, err := models.InitSessionRepo(config.DB).GetByUUID(sessionUUID)
+	if err != nil {
+		logger.Errorf("session not found (session_uuid=%s): %v", sessionUUID, err)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Session not found"})
+		return nil, false
+	}
+
+	if session.ExpertUUID != expertUUID {
+		logger.Warnf("expert %s attempted to modify session %s owned by %s", expertUUID, sessionUUID, session.ExpertUUID)
+		c.JSON(http.StatusForbidden, gin.H{"error": "You are not allowed to modify this session"})
+		return nil, false
+	}
+
+	return session, true
+}
+
+// CancelExpertSession lets the owning expert cancel a scheduled session.
+// The associated availability slot is released back to AVAILABLE so the time
+// can be rebooked. NOTE: this does not process any refund or wallet reversal.
+func CancelExpertSession(c *gin.Context) {
+	session, ok := getExpertSession(c)
+	if !ok {
+		return
+	}
+
+	switch session.Status {
+	case "completed":
+		c.JSON(http.StatusBadRequest, gin.H{"error": "A completed session cannot be cancelled"})
+		return
+	case "cancelled":
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Session is already cancelled"})
+		return
+	}
+
+	// Cancel the session and release its slot atomically.
+	err := config.DB.Transaction(func(tx *gorm.DB) error {
+		if err := models.InitSessionRepo(tx).Cancel(session.SessionUUID); err != nil {
+			return err
+		}
+		if session.SlotID != 0 {
+			if err := tx.Model(&models.AvailabilitySlot{}).
+				Where("id = ?", session.SlotID).
+				Update("status", string(models.SlotAvailable)).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		logger.Errorf("failed to cancel session (session_uuid=%s): %v", session.SessionUUID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel session"})
+		return
+	}
+
+	logger.Infof("session cancelled (session_uuid=%s, expert=%s)", session.SessionUUID, session.ExpertUUID)
+	c.JSON(http.StatusOK, gin.H{"message": "Session cancelled successfully"})
+}
+
+// CompleteExpertSession lets the owning expert mark a scheduled session as completed.
+func CompleteExpertSession(c *gin.Context) {
+	session, ok := getExpertSession(c)
+	if !ok {
+		return
+	}
+
+	switch session.Status {
+	case "completed":
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Session is already completed"})
+		return
+	case "cancelled":
+		c.JSON(http.StatusBadRequest, gin.H{"error": "A cancelled session cannot be completed"})
+		return
+	}
+
+	if err := models.InitSessionRepo(config.DB).MarkCompleted(session.SessionUUID); err != nil {
+		logger.Errorf("failed to complete session (session_uuid=%s): %v", session.SessionUUID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to complete session"})
+		return
+	}
+
+	logger.Infof("session completed (session_uuid=%s, expert=%s)", session.SessionUUID, session.ExpertUUID)
+	c.JSON(http.StatusOK, gin.H{"message": "Session marked as completed"})
 }

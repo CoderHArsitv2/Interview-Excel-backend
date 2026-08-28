@@ -6,6 +6,7 @@ import (
 	"interviewexcel-backend-go/config"
 	"interviewexcel-backend-go/models"
 	logger "interviewexcel-backend-go/pkg/errors"
+	"interviewexcel-backend-go/pkg/storage"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -63,19 +64,20 @@ func GetStudentProfile(c *gin.Context) {
 
 	// Merge response
 	resp := StudentProfile{
-		UserID:       uuid,
-		Role:         user.Role,
-		FullName:     user.FullName,
-		Email:        user.Email,
-		Phone:        safeString(user.Phone),
-		Bio:          student.Bio,
-		PreparingFor: student.PreparingFor,
-		Sessions:     student.Sessions,
-		Points:       student.Points,
-		DateOfBirth:  student.DateOfBirth,
-		City:         student.City,
-		AboutMe:      student.AboutMe,
-		Skills:       skills,
+		UserID:            uuid,
+		Role:              user.Role,
+		FullName:          user.FullName,
+		Email:             user.Email,
+		Phone:             safeString(user.Phone),
+		Bio:               student.Bio,
+		PreparingFor:      student.PreparingFor,
+		Sessions:          student.Sessions,
+		Points:            student.Points,
+		DateOfBirth:       student.DateOfBirth,
+		City:              student.City,
+		AboutMe:           student.AboutMe,
+		ProfilePictureUrl: storage.PresignStored(c.Request.Context(), student.ProfilePictureUrl),
+		Skills:            skills,
 	}
 
 	c.JSON(http.StatusOK, resp)
@@ -129,12 +131,13 @@ func UpdateStudentProfile(c *gin.Context) {
 	}
 
 	studentUpdates := map[string]interface{}{
-		"bio":           request.Bio,
-		"preparing_for": request.PreparingFor,
-		"date_of_birth": request.DateOfBirth,
-		"city":          request.City,
-		"about_me":      request.AboutMe,
-		"skills":        datatypes.JSON(skillsJSON),
+		"bio":                 request.Bio,
+		"preparing_for":       request.PreparingFor,
+		"date_of_birth":       request.DateOfBirth,
+		"city":                request.City,
+		"about_me":            request.AboutMe,
+		"profile_picture_url": request.ProfilePictureUrl,
+		"skills":              datatypes.JSON(skillsJSON),
 	}
 
 	if err := studentRepo.UpdateByUserUUID(userUUID, studentUpdates); err != nil {
@@ -226,9 +229,9 @@ func GetStudentSessions(c *gin.Context) {
 
 		if err == nil && expertDetails != nil {
 			expertName = expertDetails.FullName
-			expertPic = expertDetails.ProfilePictureUrl
+			expertPic = storage.PresignStored(c.Request.Context(), profilePictureKey(session.ExpertUUID))
 
-			// Fallback to user table for picture if not in expert profile
+			// Fallback to user table for picture if the expert never uploaded one
 			if expertPic == "" {
 				user, err := userRepo.GetByUUID(session.ExpertUUID)
 				if err == nil && user != nil {

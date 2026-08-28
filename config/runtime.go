@@ -44,6 +44,12 @@ type Runtime struct {
 	RedisUseTLS        bool
 	RazorpayKey        string
 	RazorpaySecret     string
+	R2AccountID        string
+	R2AccessKeyID      string
+	R2SecretAccessKey  string
+	R2Bucket           string
+	R2PublicBaseURL    string
+	StorageEnv         string
 }
 
 var (
@@ -51,16 +57,16 @@ var (
 	runtimeOnce   sync.Once
 )
 
-// loadYAMLConfig reads config/{env}.yaml and returns the parsed defaults.
+// loadYAMLConfig reads deploy/{env}.yaml and returns the parsed defaults.
 // Returns a zero-value yamlConfig if the file does not exist (no error).
 func loadYAMLConfig(env string) yamlConfig {
 	var cfg yamlConfig
 
 	// Try multiple search paths so it works from project root and from
-	// inside Docker (/app/config/*.yaml).
+	// inside Docker (/app/deploy/*.yaml).
 	candidates := []string{
-		filepath.Join("config", env+".yaml"),
-		filepath.Join("/app", "config", env+".yaml"),
+		filepath.Join("deploy", env+".yaml"),
+		filepath.Join("/app", "deploy", env+".yaml"),
 	}
 
 	for _, path := range candidates {
@@ -109,6 +115,12 @@ func RuntimeConfig() Runtime {
 			RedisUseTLS:        getEnvBool("REDIS_USE_TLS", yml.RedisUseTLS),
 			RazorpayKey:        strings.TrimSpace(os.Getenv("RAZORPAY_KEY")),
 			RazorpaySecret:     strings.TrimSpace(os.Getenv("RAZORPAY_SECRET")),
+			R2AccountID:        strings.TrimSpace(os.Getenv("R2_ACCOUNT_ID")),
+			R2AccessKeyID:      strings.TrimSpace(os.Getenv("R2_ACCESS_KEY_ID")),
+			R2SecretAccessKey:  strings.TrimSpace(os.Getenv("R2_SECRET_ACCESS_KEY")),
+			R2Bucket:           strings.TrimSpace(os.Getenv("R2_BUCKET")),
+			R2PublicBaseURL:    strings.TrimRight(strings.TrimSpace(os.Getenv("R2_PUBLIC_BASE_URL")), "/"),
+			StorageEnv:         getEnv("STORAGE_ENV", "local"),
 		}
 	})
 

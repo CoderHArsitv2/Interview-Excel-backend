@@ -20,5 +20,9 @@ func RegisterExpertRoutes(router *gin.Engine) {
 	expertGroup.GET("/all-slots", controllers.GetAllSlotsOfExpert)
 	expertGroup.DELETE("/availability/:slot_id", controllers.CancelSlotOfExpert)
 	expertGroup.GET("/dashboard", controllers.GetExpertDashboard)
+
+	// Session management (POST used instead of PATCH — PATCH is not in the CORS allow-list)
+	expertGroup.POST("/sessions/:session_uuid/cancel", controllers.CancelExpertSession)
+	expertGroup.POST("/sessions/:session_uuid/complete", controllers.CompleteExpertSession)
 	// Add more protected expert routes here
 }
