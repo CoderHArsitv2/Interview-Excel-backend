@@ -62,6 +62,9 @@ func GetStudentProfile(c *gin.Context) {
 		}
 	}
 
+	// The profile picture lives in user_uploads, keyed by the student's user UUID.
+	pictureKey := profilePictureKey(uuid)
+
 	// Merge response
 	resp := StudentProfile{
 		UserID:            uuid,
@@ -76,7 +79,8 @@ func GetStudentProfile(c *gin.Context) {
 		DateOfBirth:       student.DateOfBirth,
 		City:              student.City,
 		AboutMe:           student.AboutMe,
-		ProfilePictureUrl: storage.PresignStored(c.Request.Context(), student.ProfilePictureUrl),
+		ProfilePictureKey: pictureKey,
+		ProfilePictureUrl: storage.PresignStored(c.Request.Context(), pictureKey),
 		Skills:            skills,
 	}
 
@@ -130,14 +134,16 @@ func UpdateStudentProfile(c *gin.Context) {
 		return
 	}
 
+	// The profile picture is not part of this payload: it lives in user_uploads
+	// and is replaced by uploading a new file, not by updating the student row.
+	// Any profile_picture_key/url sent by the client is ignored.
 	studentUpdates := map[string]interface{}{
-		"bio":                 request.Bio,
-		"preparing_for":       request.PreparingFor,
-		"date_of_birth":       request.DateOfBirth,
-		"city":                request.City,
-		"about_me":            request.AboutMe,
-		"profile_picture_url": request.ProfilePictureUrl,
-		"skills":              datatypes.JSON(skillsJSON),
+		"bio":           request.Bio,
+		"preparing_for": request.PreparingFor,
+		"date_of_birth": request.DateOfBirth,
+		"city":          request.City,
+		"about_me":      request.AboutMe,
+		"skills":        datatypes.JSON(skillsJSON),
 	}
 
 	if err := studentRepo.UpdateByUserUUID(userUUID, studentUpdates); err != nil {
@@ -175,6 +181,30 @@ func GetAllExpertsHandler(c *gin.Context) {
 		return
 	}
 
+	// Resolve every expert's profile picture from user_uploads in one query,
+	// then presign the keys for display.
+	ownerUUIDs := make([]string, 0, len(experts))
+	for _, expert := range experts {
+		ownerUUIDs = append(ownerUUIDs, expert.UserID)
+	}
+
+	pictureKeys, err := models.InitUserUploadRepo(config.DB).
+		LatestKeysByOwners(ownerUUIDs, models.CategoryProfilePicture)
+	if err != nil {
+		// Not fatal: return the experts without pictures rather than failing.
+		logger.Error("failed to fetch expert profile pictures: ", err)
+		pictureKeys = map[string]string{}
+	}
+
+	for i := range experts {
+		key, ok := pictureKeys[experts[i].UserID]
+		if !ok {
+			continue
+		}
+		experts[i].ProfilePictureKey = key
+		experts[i].ProfilePictureUrl = storage.PresignStored(c.Request.Context(), key)
+	}
+
 	c.JSON(http.StatusOK, experts)
 }
 
@@ -193,10 +223,11 @@ func GetAvailableSlotsForExpertHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, slots)
 }
 
-// FIXME: Expert name is not Received in response
 func GetStudentSessions(c *gin.Context) {
-	sessionRepo := models.InitSessionRepo(config.DB)
-
+	var (
+		sessionRepo = models.InitSessionRepo(config.DB)
+		userRepo    = models.InitUserRepo(config.DB)
+	)
 	userID, exists := c.Get("user_uuid")
 	if !exists {
 		logger.Error("User not exists in context")
@@ -217,26 +248,21 @@ func GetStudentSessions(c *gin.Context) {
 		return
 	}
 
-	expertRepo := models.InitExpertRepo(config.DB)
-	userRepo := models.InitUserRepo(config.DB)
-
 	var detailedSessions []StudentSessionResponse
 	for _, session := range sessions {
-		// Fetch expert details
-		expertDetails, err := expertRepo.GetWithTx(config.DB, &models.Expert{UserID: session.ExpertUUID})
+		// The expert's display name lives on the users table: experts.full_name is
+		// never written (signup creates the row with only UserID, and profile
+		// updates send the name to users), so it is always empty.
 		expertName := "Unknown Expert"
-		expertPic := ""
+		expertPic := storage.PresignStored(c.Request.Context(), profilePictureKey(session.ExpertUUID))
 
-		if err == nil && expertDetails != nil {
-			expertName = expertDetails.FullName
-			expertPic = storage.PresignStored(c.Request.Context(), profilePictureKey(session.ExpertUUID))
+		expertUser, err := userRepo.GetByUUID(session.ExpertUUID)
+		if err == nil && expertUser != nil {
+			expertName = expertUser.FullName
 
-			// Fallback to user table for picture if the expert never uploaded one
+			// Fallback to the auth-provider picture if the expert never uploaded one
 			if expertPic == "" {
-				user, err := userRepo.GetByUUID(session.ExpertUUID)
-				if err == nil && user != nil {
-					expertPic = user.Picture
-				}
+				expertPic = expertUser.Picture
 			}
 		}
 
