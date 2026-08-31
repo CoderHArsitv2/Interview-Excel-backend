@@ -33,6 +33,11 @@ type Expert struct {
 	StudentMentored    int64   `gorm:"default:0" json:"student_mentored"`
 	IsAvailable        bool    `gorm:"default:true" json:"is_available"`
 
+	// ProfilePictureKey/Url are not persisted. They are resolved from
+	// user_uploads on read: the latest ACTIVE PROFILE_PICTURE for this UserID.
+	ProfilePictureKey string `gorm:"-" json:"profile_picture_key,omitempty"`
+	ProfilePictureUrl string `gorm:"-" json:"profile_picture_url,omitempty"`
+
 	AvailabilitySlots []AvailabilitySlot `gorm:"foreignKey:ExpertID;references:UserID" json:"availability_slots,omitempty"`
 }
 

@@ -30,15 +30,21 @@ type StudentProfile struct {
 	Phone    string `json:"phone"`
 	FullName string `json:"full_name"`
 
-	Bio               string    `json:"bio,omitempty"`
-	Sessions          string    `json:"sessions"`
-	Points            string    `json:"points"`
-	PreparingFor      string    `json:"preparing_for"`
-	DateOfBirth       time.Time `json:"dob"`
-	City              string    `json:"city"`
-	AboutMe           string    `json:"about_me"`
-	ProfilePictureUrl string    `json:"profile_picture_url"`
-	Skills            []string  `gorm:"type:json" json:"skills"` // JSON column for skills
+	Bio          string    `json:"bio,omitempty"`
+	Sessions     string    `json:"sessions"`
+	Points       string    `json:"points"`
+	PreparingFor string    `json:"preparing_for"`
+	DateOfBirth  time.Time `json:"dob"`
+	City         string    `json:"city"`
+	AboutMe      string    `json:"about_me"`
+
+	// Both picture fields are read-only and resolved from user_uploads.
+	// ProfilePictureKey is the R2 object key of the latest upload;
+	// ProfilePictureUrl is a short-lived presigned URL derived from it.
+	// To change the picture, upload a new file — these are ignored on update.
+	ProfilePictureKey string   `json:"profile_picture_key"`
+	ProfilePictureUrl string   `json:"profile_picture_url"`
+	Skills            []string `gorm:"type:json" json:"skills"` // JSON column for skills
 }
 
 type ExpertProfile struct {

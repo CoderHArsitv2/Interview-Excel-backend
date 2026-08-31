@@ -108,3 +108,32 @@ func (r *UserUploadRepo) GetLatestByOwnerAndCategory(ownerUUID string, category 
 	}
 	return &upload, nil
 }
+
+// LatestKeysByOwners returns the object key of the most recent active upload of
+// a category for each of the given owners, keyed by owner UUID. Owners with no
+// matching upload are absent from the map. One query, so callers listing many
+// owners avoid a per-owner lookup.
+func (r *UserUploadRepo) LatestKeysByOwners(ownerUUIDs []string, category FileUploadCategory) (map[string]string, error) {
+	keys := make(map[string]string, len(ownerUUIDs))
+	if len(ownerUUIDs) == 0 {
+		return keys, nil
+	}
+
+	var rows []struct {
+		OwnerUUID string
+		FileKey   string
+	}
+	err := r.db.Model(&UserUpload{}).
+		Select("DISTINCT ON (owner_uuid) owner_uuid, file_key").
+		Where("owner_uuid IN ? AND category = ? AND status = ?", ownerUUIDs, string(category), string(FileStatusActive)).
+		Order("owner_uuid, created_at DESC").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	for _, row := range rows {
+		keys[row.OwnerUUID] = row.FileKey
+	}
+	return keys, nil
+}
